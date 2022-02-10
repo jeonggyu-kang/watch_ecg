@@ -1,4 +1,12 @@
 *.json
+*.pdf
+*.png
+*.csv
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
