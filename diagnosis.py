@@ -7,82 +7,66 @@ import numpy as np
 
 from datetime import datetime
 
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use('agg')
-
-class ECGDrawer:
-    def __init__(self, figsize=(10,1.5), tight_layout=True):
-        self.figsize = figsize
-        self.tight_layout = tight_layout
-
-    def __call__(self, LR_value, data, label, linewidth=0.5):
-        if isinstance(data, list):
-            data = np.array(data)
-
-        fig = plt.figure(figsize=self.figsize, tight_layout=self.tight_layout)
-
-        # ecg plot
-        plt.plot(data, label=label, linewidth=linewidth)
-        #plt.title('LR = {}'.format(LR_value))
-        plt.legend()
-        plt.axis('off')
-        fig.canvas.draw()
-        fig_arr = np.array( fig.canvas.renderer._renderer )
-        fig_arr = fig_arr.reshape( fig.canvas.get_width_height()[::-1] + (4,) )
-
-        plt.close(fig)
-
-        return fig_arr
+from render import RenderFigure
+from utils import parse_json, DiagnosisKeyMapper
 
 
-def _parse_json(json_path):
-    with open(json_path, 'r') as f:
-        data = json.load(f)
-
-    patient_idx_list = list(range(len(data.keys())))
-    
-    return data, patient_idx_list
 
 class ECG_GUI:
     def __init__(self, **kwargs):
-        self.render_dir = kwargs.get('render_dir')
+        self._render(**kwargs) # rendering
+        self._build_params(**kwargs) 
+        self._build_common(**kwargs)
 
-        self.json_path = kwargs.get('json_path')
-        self.patient_dict, self.patient_idx_list = _parse_json(self.json_path)
+        self.json_path = kwargs.get('master_json')
+        self.patient_dict, self.patient_idx_list = parse_json(self.json_path)
         
         self.idx_to_id = {}
         for patient_id, idx in zip(self.patient_dict.keys(), self.patient_idx_list):
             self.idx_to_id[idx] = patient_id
-        
-        self._build_params(**kwargs)
 
-        figsize = kwargs.get('figsize')
-        self.ecg_visualizer = ECGDrawer(figsize=figsize)
-        
+        self._set_sample_length(**kwargs) # 작업해야 하는 샘플 개수를 결정
+
+
+    def _build_common(self, **kwargs):
+        self.save_every = kwargs.get('save_every')
+        if self.save_every is None:
+            self.save_every = 20
+
+        self.global_iter_cnt = 0
+
+    def _set_sample_length(self, **kwargs):
         # set exam case length
-        tmp = len(self.patient_dict.keys())
+        cnt = 0
         for p_id in self.patient_dict:
             if self.patient_dict[p_id]['is_annotated']:
-                tmp -= 1
-        self.length = tmp                
+                cnt += 1
+
+        self.length = len(self.patient_dict.keys()) - cnt
+        self.num_already_done = cnt     
+
+    def _render(self, **kwargs):
+        self.render_dir = kwargs.get('render_dir')
+        RenderFigure(
+            json = kwargs.get('master_json'),
+            render_dir = kwargs.get('render_dir'),
+            force_render = kwargs.get('force_render')
+        )()
 
     def _build_params(self, **kwargs):
         self.button_img = cv2.imread(  kwargs.get('button_path')  )
-        
-        
+                
         self.button_window_size = kwargs.get('buttonsize')
         self.button_img = cv2.resize(self.button_img, self.button_window_size)
 
         self.ecg_window_name = 'ECG'
         self.button_window_name = 'DashBoard' # window name
 
-        self.key_dict = {
-            'a': 'PAC',
-            'n': 'NSR',
-            'v': 'PVC'
-        }
+        
+        self.key_dict = DiagnosisKeyMapper.key_dict
+
         self.curr_patient_index = 0
+
 
     def commit_annotation(self, diagnosis: str):
         print(diagnosis) # debug 
@@ -93,46 +77,33 @@ class ECG_GUI:
             self.patient_dict[patient_id]['annotation_time'] = str(datetime.now())
             self.write()
 
-    def write(self):
-        with open(self.json_path, 'w') as f:
-            json.dump(self.patient_dict, f, indent='\t', ensure_ascii = False)
+    def write(self, force_save=False):
+        if force_save:
+            with open(self.json_path, 'w') as f:
+                json.dump(self.patient_dict, f, indent='\t', ensure_ascii = False)
+            self._reset_global_iter_cnt()
+            return 
+
+        if (self.global_iter_cnt+1) % self.save_every == 0:
+            with open(self.json_path, 'w') as f:
+                json.dump(self.patient_dict, f, indent='\t', ensure_ascii = False)
+            self._reset_global_iter_cnt()
+
+    def _next_global_iter_cnt(self):
+        self.global_iter_cnt += 1
+
+    def _reset_global_iter_cnt(self):
+        self.global_iter_cnt = 0
 
     def revert_annotation(self):
         patient_id = self.idx_to_id[self.curr_patient_index]
         self.patient_dict[patient_id]['annotation_info'].clear()
         self.patient_dict[patient_id]['is_annotated'] = False
         self.patient_dict[patient_id]['annotation_time'] = None
-        self.write()
-
-        print(self.curr_patient_index, patient_id)
+        #self.write()
+        
+        self._reset_global_iter_cnt()
        
-    def draw_ecg_wave(self, idx, time_step):
-        patient_id = self.idx_to_id[idx]
-
-        LR_value = self.patient_dict[patient_id]['LR']
-        raw_data = self.patient_dict[patient_id]['raw_ecg_wave_voltage']
-        denoised_data = self.patient_dict[patient_id]['denoised_ecg_wave_voltage']
-
-        chunk_size = len(raw_data) // 3
-        offset = (time_step-1) * chunk_size
-        raw_data2 = raw_data[ offset : offset + chunk_size ]
-        denoised_data2 = denoised_data[ offset : offset + chunk_size ]
-
-
-        # LR, data, label          0 1 2 
-        raw = self.ecg_visualizer( 
-            LR_value=LR_value[ (time_step-1)*2 ], 
-            data=raw_data2, 
-            label='Original {}/3'.format(time_step)
-        ) 
-        denoised = self.ecg_visualizer(
-            LR_value=LR_value[ (time_step-1)*2  +1 ],
-            data=denoised_data2, 
-            label='Denoised {}/3'.format(time_step)
-        )
-
-        img = cv2.vconcat([raw, denoised])
-        return img 
 
     def read_ecg_image(self, idx, time_step, global_step=None):
         patient_id = self.idx_to_id[idx]
@@ -161,22 +132,15 @@ class ECG_GUI:
 
         return img
         
-    def analysis(self, idx):
-        '''
-        patient_id
-                30 s
-                    10s  button (up-raw) / (bottom-denoised)
-                    10s  button (up-raw) / (bottom-denoised)
-                    10s  button (up-raw) / (bottom-denoised)
-        '''
+    def analysis(self, idx): # current patient index (not always starts from 0)
+        
         time_step = 1 # 1, 2, 3
         while True:
             if time_step > 3:
                 break
-
-            #patient_ecg_wave_img = self.draw_ecg_wave(idx, time_step) # up(raw)/bottom(denoised)
-            patient_ecg_wave_img = self.read_ecg_image(
-                idx, time_step, global_step= '{} / {}'.format(self.curr_patient_index+1, self.length
+            
+            patient_ecg_wave_img = self.read_ecg_image( # self.num_already_done
+                idx, time_step, global_step= '{} / {}'.format(self.curr_patient_index+1 - self.num_already_done, self.length
             ))
             cv2.imshow(self.ecg_window_name, patient_ecg_wave_img)
             cv2.imshow(self.button_window_name, self.button_img)
@@ -198,10 +162,14 @@ class ECG_GUI:
                         break
         
         self.next_step() # next patient ecg wave
+        self._next_global_iter_cnt()
         return 'NEXT'
+
 
     def next_step(self):
         self.curr_patient_index += 1
+        
+
     def prev_step(self):
         self.curr_patient_index -= 1
         if self.curr_patient_index < 0:
@@ -215,15 +183,12 @@ class ECG_GUI:
         cv2.namedWindow(self.ecg_window_name, cv2.WINDOW_NORMAL)
         cv2.namedWindow(self.button_window_name, cv2.WINDOW_NORMAL)
 
-        #cv2.imshow(self.ecg_window_name, img)
-        # self.patient_idx_list = [0,1,2,3,4,,,,,N]
         self.curr_patient_index = 0
         while True:
-            if self.curr_patient_index == len(self.patient_idx_list): # 2
+            if self.curr_patient_index == len(self.patient_idx_list):
                 break
-            #print(f'[{self.curr_patient_index+1}/{len(self.patient_idx_list)}] patient')
-            print('[{}/{}] patient'.format(
-                self.curr_patient_index+1 , len(self.patient_idx_list)))
+
+            print('[{}/{}] patient'.format(self.curr_patient_index+1 , len(self.patient_idx_list)))
    
             if not self.is_annotated(self.curr_patient_index):
                 ret = self.analysis(self.curr_patient_index)
@@ -232,23 +197,26 @@ class ECG_GUI:
             else:
                 self.next_step()
 
+        self.write(force_save=True)
 
 def opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--master_json', type=str, default='./dummy_ecg.json')
-    parser.add_argument('--button', type=str, default='./ecg_button.drawio.png')
-    parser.add_argument('--render_dir', type=str, default='./render_vis')
+    parser.add_argument('--master_json', type=str, default='./sample2.json')               # master json 파일 경로
+    parser.add_argument('--button', type=str, default='./resource/ecg_button.drawio.png')    # user ux ui 버튼 이미지
+    parser.add_argument('--render_dir', type=str, default='./render_vis')                    # # 렌더링 결과가 저장될 경로
     return parser.parse_args()
 
 def main():
     args = opt()
    
     app = ECG_GUI(
-        json_path = args.master_json,
+        master_json = args.master_json,
+        render_dir = args.render_dir, 
         button_path = args.button,
-        render_dir = args.render_dir, # rendering result directory
-        figsize = (10,1.5), # ecg window size
-        buttonsize=(800, 300) # button size 
+        figsize = (10,1.5),     # ecg window size
+        buttonsize=(800, 300),  # button size 
+        force_render = False,   #! True로 설정시 렌더링 초기화 (전체 영상 다시 생성)
+        save_every = 20,        #! 자동 세이브 period (환자 20명작업 마다 자동 세이브)
     )
 
     app.run()
