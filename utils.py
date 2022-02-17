@@ -10,7 +10,7 @@ class Jargon2HumanWord:
         'PAC' : '정상',
         'NSR' : '심방조기수축',
         'PVC' : '심실조기수축',
-        'artifact' : '파형 흔들림4',
+        'artifact' : '파형 흔들림',
     }
 
 # TODO : key value 추가하기
@@ -77,27 +77,27 @@ class PatientSpecificAttribute(BaseAttribute):
         self._build_organization_param()
         
     def _build_organization_param(self):
-        jargon_w = 80
-        recorded_time_w = 5
+        jargon_w = 79          # 진단 x 좌표 
+        recorded_time_w = 6    # 시간 x 좌표  
         self.location_dict = {
-            'recorded_time' : [(recorded_time_w, 8), (recorded_time_w, 54)],
+            'recorded_time' : [(recorded_time_w, 9.5), (recorded_time_w, 53.5)],
             'jargon'        : [
-                (jargon_w, 10), (jargon_w, 20), (jargon_w, 30),
-                (jargon_w, 40), (jargon_w, 50), (jargon_w, 60)
+                (jargon_w, 17), (jargon_w, 30), (jargon_w, 43),
+                (jargon_w, 61), (jargon_w, 74), (jargon_w, 87)
             ],
-            'ecg_images'    : [(5,20), (5,33), (5,46), (5,66), (5,79), (5,92)],
+            'ecg_images'    : [(5,23), (5,36), (5,49), (5,67), (5,80), (5,93)],
         }
         self.size_dict = {
-            'ecg_images' : (350, 90),
+            'ecg_images' : (415, 109),
         }
 
         # TODO : refactor 
         self.color_font_scale = {
             'recorded_time' : {
-                'size' : 8
+                'scale' : 10
             },
             'jargon' : {
-                'size' : 14,
+                'scale' : 14,
                 'color' : (0,0,0) # Red or Blue
             },
         }
@@ -183,50 +183,44 @@ class CommonAttribute(BaseAttribute):
         }
         
         self.location_dict = {
-            'ecg_rect' : (5, 70),
+            'ecg_rect' : [(4.85, 49), (4.85, 93)], #! update
             'diagnosis' : (90, 90),
-            'title'  : (5, 5),
-            'name'   : (80, 5),
-            #'recorded_time' : (90, 90),
-            'page' : (90, 90),
-            'logo' : (45, 95), 
-            'board' : (45, 80), 
-            'legend_board' : (70, 10),
+            'title'  : (5, 3),
+            'name'   : (77, 3),
+            'page' : (90, 98.5),
+            'logo' : (45, 99), 
+            'board' : (77, 92), 
+            'legend_board' : (78, 9.5),
         }
 
         self.size_dict = {
             'logo' : (100, 20), # width, height
-            'board' : (300, 600),
-            'ecg_rect' : (300, 600)
+            'board' : (120, 690),
+            'ecg_rect' : (416, 328)
         }
 
         # TODO : refactor 
         self.color_font_scale = {
             'title' : {
-                'size' : 16,
+                'scale' : 50,
             },
             'diagnosis' : {
-                'size' : 14,
+                'scale' : 14,
             },
             'name' : {
-                'size' : 12
+                'scale' : 12
             },
             'page' : {
-                'size' : 10
+                'scale' : 10
             },
             'legend_board' : {
-                'size' : 10
+                'scale' : 10
+            },
+            'ecg_rect' : { #! update
+                'color' : (0,0,255),
+                'fill' : True
             }
         }
-    def _get_color_font_scale(self, attribute_type):
-        color = None; font = None; scale = None
-        if 'color' in self.color_font_scale[attribute_type]:
-            color = self.color_font_scale[attribute_type]['color']
-        if 'font' in self.color_font_scale[attribute_type]:
-            font = self.color_font_scale[attribute_type]['font']
-        if 'scale' in self.color_font_scale[attribute_type]:
-            scale = self.color_font_scale[attribute_type]['scale']
-        return color, font, scale
 
     def update_attribute(self, key, value):
         if key == 'page':
@@ -239,13 +233,33 @@ class CommonAttribute(BaseAttribute):
         cur_pp += 1
         self.attribute_dict['page'] = '{}/{}'.format(cur_pp, max_pp)
 
+    def _get_color_fill_for_rect(self, k):
+        color, _, _ = self._get_color_font_scale(k)
+        
+        if 'fill' in self.color_font_scale[k].keys():
+            fill = self.color_font_scale[k]['fill']
+        else:
+            fill = None
+
+        return color, fill
+
     def __call__(self, pdf, method):
         for k, v in self.shape_dict.items():
             if v == 'rect':
+                color, fill = self._get_color_fill_for_rect(k)
                 method.rect(
                     pdf = pdf,
-                    location = self.location_dict[k],
-                    size = self.size_dict[k]
+                    location = self.location_dict[k][0],
+                    size = self.size_dict[k],
+                    color = color,
+                    fill = fill
+                )
+                method.rect(
+                    pdf = pdf,
+                    location = self.location_dict[k][1],
+                    size = self.size_dict[k],
+                    color = color,
+                    fill = fill
                 )
             else:
                 raise ValueError

@@ -32,10 +32,14 @@ class PDF(BasePDF): # reportlab 의존성
     A4_height_in_inch = (11  + 11/16)*inch
 
     @staticmethod
-    def rect(pdf, location, size, fill=False):
+    def rect(pdf, location, size, color=None, fill=False):
         if True: # TODO : make it optional
             location = PDF.get_coords_by_ratio(location)
 
+        if color is None:
+            color = (0,0,0)
+        
+        pdf.setFillColor(color)
         pdf.rect(location[0], location[1], size[0], size[1], stroke=True, fill=fill)
 
 
@@ -75,6 +79,7 @@ class PDF(BasePDF): # reportlab 의존성
                 location (tuple or list) : coords of content to be displayed. (x, y)
                 size (tuple or list) : size of content to be displayed. (width, height)
         '''
+        
         if True: # TODO : make it optional
             location = PDF.get_coords_by_ratio(location)
         pdf.drawImage(image_path, location[0], location[1], width=size[0], height=size[1])

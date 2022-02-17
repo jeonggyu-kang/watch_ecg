@@ -14,7 +14,7 @@ from utils import parse_json, DiagnosisKeyMapper
 
 class ECG_GUI:
     def __init__(self, **kwargs):
-        self._render(**kwargs) # rendering
+        self._build_render(**kwargs) # rendering
         self._build_params(**kwargs) 
         self._build_common(**kwargs)
 
@@ -45,12 +45,14 @@ class ECG_GUI:
         self.length = len(self.patient_dict.keys()) - cnt
         self.num_already_done = cnt     
 
-    def _render(self, **kwargs):
+    def _build_render(self, **kwargs):
         self.render_dir = kwargs.get('render_dir')
         RenderFigure(
             json = kwargs.get('master_json'),
             render_dir = kwargs.get('render_dir'),
-            force_render = kwargs.get('force_render')
+            force_render = kwargs.get('force_render'),
+            fig_line_width = kwargs.get('fig_line_width'),
+            line_color = kwargs.get('line_color')
         )()
 
     def _build_params(self, **kwargs):
@@ -214,6 +216,8 @@ def main():
         render_dir = args.render_dir, 
         button_path = args.button,
         figsize = (10,1.5),     # ecg window size
+        fig_line_width = 1.0,   # figure line width #! update
+        line_color = '#e35f62', # figure line 색상 #! update
         buttonsize=(800, 300),  # button size 
         force_render = False,   #! True로 설정시 렌더링 초기화 (전체 영상 다시 생성)
         save_every = 20,        #! 자동 세이브 period (환자 20명작업 마다 자동 세이브)

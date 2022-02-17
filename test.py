@@ -20,6 +20,7 @@ def make_dummy_data():
                 "is_annotated" : False,
                 "annotation_info": [],
                 "annotation_time": None
+                "recorded_time" : ""   # 기록된 날짜, 측정 일시 (애플, 삼성)
     }
     return dummy_dict
 

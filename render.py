@@ -21,7 +21,7 @@ class ECGDrawer:
         self.figsize = figsize
         self.tight_layout = tight_layout
 
-    def __call__(self, LR_value, data, label, linewidth=0.5):
+    def __call__(self, LR_value, data, label, linewidth, color):
         '''
             LR 값, ecg np.ndarray, 레이블 정보
         '''
@@ -31,9 +31,11 @@ class ECGDrawer:
         fig = plt.figure(figsize=self.figsize, tight_layout=self.tight_layout)
 
         # ecg plot
-        plt.plot(data, label=label, linewidth=linewidth)
+        if linewidth is None:
+            linewidth = 0.5
+        plt.plot(data, color=color, label=label, linewidth=linewidth)
         
-        plt.legend()
+        plt.legend(loc='upper right')
         plt.axis('off')
         fig.canvas.draw()
         fig_arr = np.array( fig.canvas.renderer._renderer )
@@ -61,6 +63,9 @@ class RenderFigure:
         if self.force_render is None:
             self.force_render = False
 
+        self.fig_line_width = kwargs.get('fig_line_width')
+        self.color = kwargs.get('line_color')
+
     def draw_ecg_wave(self, patient_id, time_step):
         LR_value = self.patient_dict[patient_id]['LR']
         raw_data = self.patient_dict[patient_id]['raw_ecg_wave_voltage']
@@ -75,12 +80,16 @@ class RenderFigure:
         raw = self.ecg_visualizer( 
             LR_value=LR_value[ (time_step-1)*2 ], 
             data=raw_data2, 
-            label='Original {}/3'.format(time_step)
+            label='Original {}/3'.format(time_step),
+            linewidth=self.fig_line_width,
+            color = self.color
         ) 
         denoised = self.ecg_visualizer(
             LR_value=LR_value[ (time_step-1)*2  +1 ],
             data=denoised_data2, 
-            label='Denoised {}/3'.format(time_step)
+            label='Denoised {}/3'.format(time_step),
+            linewidth=self.fig_line_width,
+            color = self.color
         )
         img = cv2.vconcat([raw, denoised])
         height, width, _ = img.shape
@@ -116,7 +125,7 @@ class RenderFigure:
 
 def opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--master_json', type=str, default='./dummy_ecg.json')  # 입력 master json파일 경로 
+    parser.add_argument('--master_json', type=str, default='./sample2.json')  # 입력 master json파일 경로 
     parser.add_argument('--render_dir', type=str, default='./render_vis')       # 렌더링 결과가 저장될 경로
     return parser.parse_args()
 
@@ -125,7 +134,10 @@ def main():
 
     RenderFigure(
         json = args.master_json,
-        render_dir = args.render_dir
+        render_dir = args.render_dir,
+        force_render = True, #! force render
+        fig_line_width = 2.0, #! matplotlib fig line 두께 파라미터
+        line_color = '#e35f62'
     )()
 
 
